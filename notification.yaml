@@ -1,0 +1,63 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Quicksight metrics notification template'
+
+Parameters:
+  Environment:
+    Description: Enviornment currently being used
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+  PipelineStack:
+    Type: String
+    Description: Name of code pipeline stack.
+  SecurityStack:
+    Type: String
+    Description: Name of security stack that contains all the rules
+  TemplatePath:
+    Description: S3Bucket Path where the templates are stored
+    Type: String
+    Default: quicksight-templates
+
+Resources:
+  ServerlessFunction:
+    Properties:
+      Runtime: python3.8
+      CodeUri: 
+        Bucket: !Ref TemplatePath
+        Key: 'cft/lambda/codepipeline-notification.zip'
+      Handler: message.lambda_message
+      Architectures:
+        - x86_64
+      Events:
+        CodePipelineFailureEvents:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source:
+                - aws.codepipeline
+              detail-type:
+                - CodePipeline Pipeline Execution State Change
+              detail:
+                state:
+                  - FAILED
+                pipeline:
+                  - Fn::ImportValue: !Sub '${PipelineStack}-CodePipelineID'
+      Timeout: 600
+      Environment:
+        Variables:
+          Topic: !Ref CodePipelineFailureNotification
+      Role: 
+        Fn::ImportValue: !Sub ${SecurityStack}-LambdaRole
+    Type: AWS::Serverless::Function
+  
+  CodePipelineFailureNotification:
+    Properties:
+      DisplayName: quicksight-frontend-pipeline
+      Subscription:
+         - Protocol: email
+           Endpoint: nathan.foster@ascendingdc.com
+    Type: AWS::SNS::Topic

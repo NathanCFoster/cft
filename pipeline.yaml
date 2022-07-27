@@ -1,0 +1,224 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS Cookie Cutter pipeline"
+
+Parameters:
+  Environment:
+    Default: dev
+    Description: Which Env to use
+    Type: String
+    AllowedValues:
+      - dev
+      - prod
+  GitHubAuthToken:
+    Description: OAuth token provided by GitHub to grant access to repo
+    Type: String
+    NoEcho: true
+  RepoName:
+    Type: String
+    Description: Name of the repo
+  S3BucketName:
+    Type: String
+    Description: Name of the s3 bucket that contains all the front end data
+  ArtifactsBucket:
+    Type: String
+    Description: Name of the s3 bucket that contains all the pipeline Artifacts
+  CloudFrontId:
+    Type: String
+    Description: Id of the cloudfront to connect to
+  SecurityStack:
+    Description: Name of the CloudFormation Stack that contains all roles and SGs Resources
+    Type: String
+  ProjectName:
+    Description: A project name that is prefixed to resource names
+    Type: String
+    Default: quicksight-front-end
+
+Mappings:
+  Constants:
+    RepoOwner:
+      Value: ascending-llc
+  Map:
+    dev:
+      Branch: test
+    prod:
+      Branch: main
+
+Resources:
+  BuildFrontend:
+    Properties:
+      Name: !Sub "${AWS::StackName}-BuildFrontend"
+      Artifacts:
+        Type: no_artifacts
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: env
+            Value: !Ref Environment
+          - Name: s3
+            Value: !Ref S3BucketName
+      ServiceRole:
+        Fn::ImportValue: !Sub "${SecurityStack}-CodeBuildRole"
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 12
+                python: 3.8
+              commands:
+                - n 17
+            pre_build:
+              commands:
+                - n 17
+                - cd quicksight_key_metrics
+                - npm install
+                - npm i -g env-cmd
+            build:
+              commands:
+                - npm run build:${env}
+            post_build:
+              commands:
+                - aws s3 cp build s3://${s3}/${env}/build --recursive
+          Artifacts:
+            files:
+              - '**/*'
+            base-directory: quicksight_key_metrics/build
+    Type: AWS::CodeBuild::Project
+
+  UpdateLambda:
+    Properties:
+      Name: !Sub "${AWS::StackName}-update-lambda"
+      Artifacts:
+        Type: no_artifacts
+      ServiceRole: 
+        Fn::ImportValue: !Sub ${SecurityStack}-CodeBuildRole
+      Environment:
+        EnvironmentVariables:
+          - Name: CF
+            Value: !Ref CloudFrontId
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 12
+                python: 3.8
+              commands:
+                - n 17
+            build:
+              commands:
+                - cd lambda
+                - sam build
+                - sam deploy --no-fail-on-empty-changeset
+    Type: AWS::CodeBuild::Project
+
+  InvalidateCloudfront:
+    Properties:
+      Name: !Sub "${AWS::StackName}-invalidate-cloudfront"
+      Artifacts:
+        Type: no_artifacts
+      ServiceRole: 
+        Fn::ImportValue: !Sub ${SecurityStack}-CodeBuildRole
+      Environment:
+        EnvironmentVariables:
+          - Name: CF
+            Value: !Ref CloudFrontId
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - aws cloudfront create-invalidation --distribution-id ${CF} --paths '/*'
+    Type: AWS::CodeBuild::Project
+
+  Pipeline:
+    Properties:
+      Name: !Sub ${AWS::StackName}-codepipeline
+      RoleArn: 
+        Fn::ImportValue: !Sub ${SecurityStack}-CodePipelineRole
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactsBucket
+      Stages:
+        - Name: FrontEndSource
+          Actions:
+            - Name: GitHubRepository
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: 1
+              Configuration:
+                Owner: !FindInMap [Constants, RepoOwner, Value]
+                Repo: !Ref RepoName
+                Branch: !FindInMap  [Map, !Ref Environment, Branch]
+                OAuthToken: !Ref GitHubAuthToken
+              OutputArtifacts:
+                - Name: FrontEndRepositoryFiles
+              RunOrder: 1
+        - Name: UpdateLambda
+          Actions:
+            - Name: Update
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref UpdateLambda
+              InputArtifacts:
+                - Name: FrontEndRepositoryFiles
+              RunOrder: 1
+        - Name: BuildAndDeploy
+          Actions:
+            - Name: BuildFrontendAndDeploy
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref BuildFrontend
+              InputArtifacts:
+                - Name: FrontEndRepositoryFiles
+              OutputArtifacts:
+                - Name: FrontEndBuild
+              RunOrder: 1
+        - Name: Invalidate
+          Actions:
+            - Name: Invalidate
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref InvalidateCloudfront
+              InputArtifacts:
+                - Name: FrontEndBuild
+              RunOrder: 1
+    Type: AWS::CodePipeline::Pipeline
+
+Outputs:
+  StackName:
+    Description: Name of the stack name
+    Value: !Ref AWS::StackName
+  CodePipelineID:
+    Description: The CodePipeline ID to use for event bridge
+    Value: !Ref Pipeline
+    Export:
+      Name: !Sub ${AWS::StackName}-CodePipelineID

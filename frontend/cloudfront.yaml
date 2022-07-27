@@ -1,0 +1,88 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Cloudformation Template for React Frontend"
+
+Parameters:
+  Environment:
+    Description: Environment to deploy. Use dev for testing.
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+  S3BucketName:
+    Type: String
+  CachePolicyName:
+    Type: String
+  CachePolicyGzip:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+
+Resources:
+  CachePolicy:
+    Properties:
+      CachePolicyConfig:
+        Comment: Cache Policy for cloudfront distribution
+        DefaultTTL: 86400
+        MaxTTL: 31536000
+        MinTTL: 1
+        Name: !Ref CachePolicyName
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          EnableAcceptEncodingGzip: !Ref CachePolicyGzip
+          EnableAcceptEncodingBrotli: !Ref CachePolicyGzip
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+    Type: AWS::CloudFront::CachePolicy
+
+  OriginAccessId:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: "OriginAccessIdentity"
+
+  Distribution:
+    Metadata:
+      Comment: A Cloudfront distribution with an s3 origin
+    Properties:
+      DistributionConfig:
+        Comment: A Distribution with an s3 origin
+        Enabled: True
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - HEAD
+            - GET
+          CachedMethods:
+            - HEAD
+            - GET
+          DefaultTTL: 86400
+          MaxTTL: 31536000
+          MinTTL: 1
+          Compress: true
+          CachePolicyId: !Ref CachePolicy
+          TargetOriginId: !Sub "s3-origin-${S3BucketName}"
+          ViewerProtocolPolicy: redirect-to-https
+        DefaultRootObject: index.html
+        HttpVersion: http1.1
+        IPV6Enabled: false
+        Origins:
+          - DomainName: !Sub ${S3BucketName}.s3.amazonaws.com
+            Id: !Sub "s3-origin-${S3BucketName}"
+            OriginPath: !Sub "/${Environment}/build"
+            S3OriginConfig: 
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${OriginAccessId}'
+    Type: AWS::CloudFront::Distribution
+
+Outputs:
+  CloudFrontId:
+    Description: Id of the cloudfront to connect to
+    Value: !Ref Distribution
+  StackName:
+    Description: Name of the stack name
+    Value: !Ref AWS::StackName
