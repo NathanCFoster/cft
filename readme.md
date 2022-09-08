@@ -2,8 +2,6 @@
 
 ### To get started
 
-- Configure Commands in CI/CD
-- Configure All paramters and Mappings in yaml files
 - Create an S3 bucket to hold templates and other information
-- Copy all files to CFT bucket
-- Upload each root template
+- Copy all files to CFT bucket under the `cft/` prefix
+- Upload root template to CloudFormation

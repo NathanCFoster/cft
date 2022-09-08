@@ -6,12 +6,12 @@ Parameters:
   TemplatePath:
     Description: S3Bucket Path where the templates are stored
     Type: String
-    Default: quicksight-key-metrics-cft
+    Default: ({})
 
   ProjectName:
     Description: A project name that is prefixed to resource names
     Type: String
-    Default: quicksight-front-end
+    Default: ({})
 
   EnvironmentName:
     Description: An environment name that is prefixed to resource names
@@ -23,21 +23,22 @@ Parameters:
   SecurityStack:
     Description: The name of security cloudformation stack
     Type: String
-    Default: Ascending-Security
+    Default: ({})
 
   ArtifactsBucket:
     Description: The name of frontend pipeline artifact bucket
     Type: String
-    Default: quicksight-key-metrics-cft
+    Default: ({})
 
   FrontendBucket:
     Description: The name of frontend bucket
     Type: String
-    Default: quicksight-key-metrics-cft
+    Default: ({})
   
   GitHubAuthToken:
     Description: OAuthToken to connect to github
     Type: String
+    Default: ({})
     NoEcho: true
 
 Resources:

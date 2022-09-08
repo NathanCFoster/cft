@@ -20,7 +20,6 @@ Parameters:
   TemplatePath:
     Description: S3Bucket Path where the templates are stored
     Type: String
-    Default: quicksight-templates
 
 Resources:
   ServerlessFunction:
