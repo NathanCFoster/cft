@@ -41,9 +41,30 @@ Parameters:
     Default: ({})
     NoEcho: true
 
+  Backend:
+    Description: Would you like a backend template?
+    Type: String
+    Default: ({})
+    AllowedValues:
+      - Yes
+      - No
+
+  Frontend:
+    Description: Would you like a frontend template?
+    Type: String
+    Default: ({})
+    AllowedValues:
+      - Yes
+      - No
+
+Conditions:
+  Backend: !Equals [ !Ref Backend, Yes ]
+  Frontend: !Equals [ !Ref Frontend, Yes ]
+
 Resources:
-  CloudFrontStack:
+  FrontendCloudFrontStack:
     Type: "AWS::CloudFormation::Stack"
+    Condition: Frontend
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/cloudfront.yaml"
       Parameters:
@@ -55,9 +76,10 @@ Resources:
         - Key: Name
           Value: CloudFrontStack
     
-  CodepipelineStack:
+  FrontendCodepipelineStack:
     Type: "AWS::CloudFormation::Stack"
-    DependsOn: CloudFrontStack
+    DependsOn: FrontendCloudFrontStack
+    Condition: Frontend
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/pipeline.yaml"
       Parameters:
@@ -75,7 +97,8 @@ Resources:
 
   NotificationStack:
     Type: "AWS::CloudFormation::Stack"
-    DependsOn: CodepipelineStack
+    DependsOn: FrontendCodepipelineStack
+    Condition: Frontend
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
       Parameters:
@@ -86,3 +109,11 @@ Resources:
       Tags:
         - Key: Name
           Value: NotificationStack
+
+  BackendStack:
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
+      Tags:
+        - Key: Name
+          Value: BackendStack
+    Type: AWS::CloudFormation::Stack

@@ -1,0 +1,338 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cloudformation template to create all SG and roles
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Select a VPC with Subnets covering 2 Availability zone at least.
+    MinLength: 1
+Resources:
+  GraylogSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '0'
+          ToPort: '65535'
+          SourceSecurityGroupId: !Ref ALBSG
+      Tags:
+        -
+          Key: Name
+          Value: GraylogSG
+      VpcId: !Ref VpcId      
+
+  ALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        -
+          Key: Name
+          Value: ALBSG
+      VpcId: !Ref VpcId
+  EksSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: EKS security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        -
+          Key: Name
+          Value: EksSG
+      VpcId: !Ref VpcId
+  WorkerNodeSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: WorkerNode security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '30000'
+          ToPort: '32767'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '0'
+          ToPort: '65535'
+          SourceSecurityGroupId: !Ref ALBSG
+        - IpProtocol: tcp
+          FromPort: '1025'
+          ToPort: '65535'
+          SourceSecurityGroupId: !Ref EksSG
+      Tags:
+        -
+          Key: Name
+          Value: WorkerNodeSG
+      VpcId: !Ref VpcId
+  NodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: WorkerNodeSG
+    Properties:
+      Description: Allow node to communicate with each other
+      GroupId: !Ref WorkerNodeSG
+      SourceSecurityGroupId: !Ref WorkerNodeSG
+      IpProtocol: '-1'
+      FromPort: 0
+      ToPort: 65535
+  PostgreSQLSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '5432'
+          ToPort: '5432'
+          SourceSecurityGroupId: !Ref WorkerNodeSG
+      Tags:
+        -
+          Key: Name
+          Value: PostgreSQLSG
+      VpcId: !Ref VpcId
+  EksRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "eks.amazonaws.com"
+                - "ec2.amazonaws.com"
+                - "ec2fleet.amazonaws.com"
+                - "spotfleet.amazonaws.com"
+                - "autoscaling.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: "EksRolePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: 
+                  - "cloudwatch:*"
+                  - "s3:*"
+                  - "logs:*"
+                  - "eks:*"
+                  - "ec2:*"
+                  - "ecr:*"
+                  - "sts:AssumeRole"
+                  - "iam:*"
+                  - "sqs:*"
+                Resource: "*"
+  EksInstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Roles: 
+        - 
+          Ref: "EksRole"
+  CodeBuildRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "codebuild.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: "CodeBuildRolePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: 
+                  - "ec2:*"
+                  - "cloudwatch:*"
+                  - "s3:*"
+                  - "logs:*"
+                  - "ecr:*"
+                  - "cloudfront:*"
+                  - "cloudformation:*"
+                  - "iam:*"
+                  - "lambda:*"
+                  - "events:*"
+                  - "apigateway:*"
+                  - "es:*"
+                  - "sqs:*"
+                Resource: "*"
+  CodePipelineRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "codepipeline.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: "CodePipelineRolePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: 
+                  - "s3:*"
+                  - "cloudformation:*"
+                  - "codebuild:*"
+                Resource: "*"
+  LambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: "LambdaRolePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: 
+                  - "cloudwatch:*"
+                  - "s3:*"
+                  - "logs:*"
+                  - "ssm:*"
+                  - "sns:*"
+                  - "dynamodb:*"
+                  - "sqs:*"
+                Resource: "*"
+  
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Elastic Load Balancer
+      GroupName: "elb-sg"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIpv6: ::/0
+      VpcId: !Ref VpcId
+
+  ECSTaskRole:
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ecs-tasks.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: "ECSTaskRolePolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: 
+                  - "ecr:*"
+                Resource: "*"
+
+Outputs:
+  ALBSG:
+    Value: !Ref 'ALBSG'
+    Description: ALB security group
+    Export: 
+      Name: !Sub "${AWS::StackName}-ALBSG"
+  EksSG:
+    Value: !Ref 'EksSG'
+    Description: EKS security group
+    Export: 
+      Name: !Sub "${AWS::StackName}-EksSG"
+  WorkerNodeSG:
+    Value: !Ref 'WorkerNodeSG'
+    Description: WorkerNodeSG security group
+    Export: 
+      Name: !Sub "${AWS::StackName}-WorkerNodeSG"
+  PostgreSQLSG:
+    Value: !Ref 'PostgreSQLSG'
+    Description: PostgreSQL security group
+    Export: 
+      Name: !Sub "${AWS::StackName}-PostgreSQLSG"
+  EksRole:
+    Value: !GetAtt 'EksRole.Arn'
+    Description: EKS security group
+    Export: 
+      Name: !Sub "${AWS::StackName}-EksRole"
+  EksInstanceProfile:
+    Value: !GetAtt 'EksInstanceProfile.Arn'
+    Description: EksInstanceProfile arn
+    Export: 
+      Name: !Sub "${AWS::StackName}-EksInstanceProfile"
+  CodeBuildRole:
+    Value: !GetAtt 'CodeBuildRole.Arn'
+    Description: CodeBuildRole arn
+    Export: 
+      Name: !Sub "${AWS::StackName}-CodeBuildRole"
+  CodePipelineRole:
+    Value: !GetAtt 'CodePipelineRole.Arn'
+    Description: CodePipelineRole arn
+    Export: 
+      Name: !Sub "${AWS::StackName}-CodePipelineRole"
+  LambdaRole:
+    Value: !GetAtt 'LambdaRole.Arn'
+    Description: LambdaRole arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaRole"
+  StackName:
+    Value: !Ref AWS::StackName
+  ECSTaskRole:
+    Description: A reference to the ECS Task role
+    Value: !GetAtt ECSTaskRole.Arn
+    Export: 
+      Name: !Sub "${AWS::StackName}-ECSTaskRole"
+  ELBSecurityGroup:
+    Description: A reference to the ELBSecurityGroup
+    Value: !Ref ELBSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-ELBSecurityGroup"
