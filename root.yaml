@@ -41,8 +41,6 @@ Parameters:
     Default: ({})
     NoEcho: true
 
-<<<<<<<< HEAD:root.yaml
-========
   CICD:
     Description: Would you like A CI/CD process
     Type: String
@@ -54,7 +52,6 @@ Parameters:
 Conditions:
   Pipeline: !Equals [ !Ref CICD, Yes ]
 
->>>>>>>> parent of 056e84c (updates):frontend/root.yaml
 Resources:
   CloudFrontStack:
     Type: "AWS::CloudFormation::Stack"
@@ -68,17 +65,11 @@ Resources:
       Tags:
         - Key: Name
           Value: CloudFrontStack
-    
-<<<<<<<< HEAD:root.yaml
-  CodepipelineStack:
-    Type: "AWS::CloudFormation::Stack"
-    DependsOn: CloudFrontStack
-========
+
   CodePipelineStack:
     Type: "AWS::CloudFormation::Stack"
     DependsOn: CloudFrontStack
     Condition: Pipeline
->>>>>>>> parent of 056e84c (updates):frontend/root.yaml
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/pipeline.yaml"
       Parameters:
@@ -96,11 +87,7 @@ Resources:
 
   NotificationStack:
     Type: "AWS::CloudFormation::Stack"
-<<<<<<<< HEAD:root.yaml
     DependsOn: CodepipelineStack
-========
-    DependsOn: CodePipelineStack
->>>>>>>> parent of 056e84c (updates):frontend/root.yaml
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/notification.yaml"
       Parameters:
