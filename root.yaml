@@ -1,24 +1,8 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: The one Cloudformation you'll ever need.
+Description: 'Root template for quicksight-frontend'
 
 Parameters:
-  Backend:
-    Description: Would you like a backend template?
-    Type: String
-    Default: ({})
-    AllowedValues:
-      - Yes
-      - No
-
-  Frontend:
-    Description: Would you like a frontend template?
-    Type: String
-    Default: ({})
-    AllowedValues:
-      - Yes
-      - No
-
   TemplatePath:
     Description: S3Bucket Path where the templates are stored
     Type: String
@@ -57,27 +41,73 @@ Parameters:
     Default: ({})
     NoEcho: true
 
-  SecurityStack:
-    Description: 
+<<<<<<<< HEAD:root.yaml
+========
+  CICD:
+    Description: Would you like A CI/CD process
+    Type: String
+    Default: ({})
+    AllowedValues:
+      - Yes
+      - No
 
 Conditions:
-  Backend: !Equals [ !Ref Backend, Yes ]
-  Frontend: !Equals [ !Ref Frontend, Yes ]
-  Security: !Equals [ !Ref Security, Yes ]
+  Pipeline: !Equals [ !Ref CICD, Yes ]
 
+>>>>>>>> parent of 056e84c (updates):frontend/root.yaml
 Resources:
-  BackendStack:
+  CloudFrontStack:
+    Type: "AWS::CloudFormation::Stack"
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/cloudfront.yaml"
+      Parameters:
+        Environment: !Ref EnvironmentName
+        S3BucketName: !Ref FrontendBucket
+        CachePolicyName: !Sub ${ProjectName}-cache-policy-${EnvironmentName}
+        CachePolicyGzip: 'true'
       Tags:
         - Key: Name
-          Value: BackendStack
-    Type: AWS::CloudFormation::Stack
+          Value: CloudFrontStack
+    
+<<<<<<<< HEAD:root.yaml
+  CodepipelineStack:
+    Type: "AWS::CloudFormation::Stack"
+    DependsOn: CloudFrontStack
+========
+  CodePipelineStack:
+    Type: "AWS::CloudFormation::Stack"
+    DependsOn: CloudFrontStack
+    Condition: Pipeline
+>>>>>>>> parent of 056e84c (updates):frontend/root.yaml
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/pipeline.yaml"
+      Parameters:
+        Environment:  !Ref EnvironmentName
+        GitHubAuthToken: !Ref GitHubAuthToken
+        RepoName: 'Quicksight-Key-Metrics'
+        ArtifactsBucket: !Ref ArtifactsBucket
+        S3BucketName: !Ref FrontendBucket
+        CloudFrontId: !GetAtt CloudFrontStack.Outputs.CloudFrontId
+        SecurityStack: !Ref SecurityStack
+        ProjectName: !Ref ProjectName
+      Tags:
+        - Key: Name
+          Value: CodepipelineStack
 
-  FrontendStack:
+  NotificationStack:
+    Type: "AWS::CloudFormation::Stack"
+<<<<<<<< HEAD:root.yaml
+    DependsOn: CodepipelineStack
+========
+    DependsOn: CodePipelineStack
+>>>>>>>> parent of 056e84c (updates):frontend/root.yaml
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/notification.yaml"
+      Parameters:
+        Environment: !Ref EnvironmentName
+        PipelineStack: !GetAtt CodepipelineStack.Outputs.StackName
+        SecurityStack: !Ref SecurityStack
+        TemplatePath: !Ref TemplatePath
       Tags:
         - Key: Name
-          Value: BackendStack
-    Type: AWS::CloudFormation::Stack
+          Value: NotificationStack
