@@ -1,0 +1,83 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: The one Cloudformation you'll ever need.
+
+Parameters:
+  Backend:
+    Description: Would you like a backend template?
+    Type: String
+    Default: ({})
+    AllowedValues:
+      - Yes
+      - No
+
+  Frontend:
+    Description: Would you like a frontend template?
+    Type: String
+    Default: ({})
+    AllowedValues:
+      - Yes
+      - No
+
+  TemplatePath:
+    Description: S3Bucket Path where the templates are stored
+    Type: String
+    Default: ({})
+
+  ProjectName:
+    Description: A project name that is prefixed to resource names
+    Type: String
+    Default: ({})
+
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+    AllowedValues:
+      - dev
+      - prod
+  
+  SecurityStack:
+    Description: The name of security cloudformation stack
+    Type: String
+    Default: ({})
+
+  ArtifactsBucket:
+    Description: The name of frontend pipeline artifact bucket
+    Type: String
+    Default: ({})
+
+  FrontendBucket:
+    Description: The name of frontend bucket
+    Type: String
+    Default: ({})
+  
+  GitHubAuthToken:
+    Description: OAuthToken to connect to github
+    Type: String
+    Default: ({})
+    NoEcho: true
+
+  SecurityStack:
+    Description: 
+
+Conditions:
+  Backend: !Equals [ !Ref Backend, Yes ]
+  Frontend: !Equals [ !Ref Frontend, Yes ]
+  Security: !Equals [ !Ref Security, Yes ]
+
+Resources:
+  BackendStack:
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
+      Tags:
+        - Key: Name
+          Value: BackendStack
+    Type: AWS::CloudFormation::Stack
+
+  FrontendStack:
+    Properties:
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
+      Tags:
+        - Key: Name
+          Value: BackendStack
+    Type: AWS::CloudFormation::Stack

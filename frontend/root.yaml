@@ -41,16 +41,8 @@ Parameters:
     Default: ({})
     NoEcho: true
 
-  Backend:
-    Description: Would you like a backend template?
-    Type: String
-    Default: ({})
-    AllowedValues:
-      - Yes
-      - No
-
-  Frontend:
-    Description: Would you like a frontend template?
+  CICD:
+    Description: Would you like A CI/CD process
     Type: String
     Default: ({})
     AllowedValues:
@@ -58,13 +50,11 @@ Parameters:
       - No
 
 Conditions:
-  Backend: !Equals [ !Ref Backend, Yes ]
-  Frontend: !Equals [ !Ref Frontend, Yes ]
+  Pipeline: !Equals [ !Ref CICD, Yes ]
 
 Resources:
-  FrontendCloudFrontStack:
+  CloudFrontStack:
     Type: "AWS::CloudFormation::Stack"
-    Condition: Frontend
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/cloudfront.yaml"
       Parameters:
@@ -76,12 +66,12 @@ Resources:
         - Key: Name
           Value: CloudFrontStack
     
-  FrontendCodepipelineStack:
+  CodePipelineStack:
     Type: "AWS::CloudFormation::Stack"
-    DependsOn: FrontendCloudFrontStack
-    Condition: Frontend
+    DependsOn: CloudFrontStack
+    Condition: Pipeline
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/pipeline.yaml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/pipeline.yaml"
       Parameters:
         Environment:  !Ref EnvironmentName
         GitHubAuthToken: !Ref GitHubAuthToken
@@ -97,10 +87,9 @@ Resources:
 
   NotificationStack:
     Type: "AWS::CloudFormation::Stack"
-    DependsOn: FrontendCodepipelineStack
-    Condition: Frontend
+    DependsOn: CodePipelineStack
     Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
+      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/notification.yaml"
       Parameters:
         Environment: !Ref EnvironmentName
         PipelineStack: !GetAtt CodepipelineStack.Outputs.StackName
@@ -109,11 +98,3 @@ Resources:
       Tags:
         - Key: Name
           Value: NotificationStack
-
-  BackendStack:
-    Properties:
-      TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/notification.yaml"
-      Tags:
-        - Key: Name
-          Value: BackendStack
-    Type: AWS::CloudFormation::Stack
