@@ -9,7 +9,7 @@ Parameters:
     Default: ({})
 
   ProjectName:
-    Description: A project name that is prefixed to resource names
+    Description: A project name that refers to a Repo
     Type: String
     Default: ({})
 
@@ -41,17 +41,6 @@ Parameters:
     Default: ({})
     NoEcho: true
 
-  CICD:
-    Description: Would you like A CI/CD process
-    Type: String
-    Default: ({})
-    AllowedValues:
-      - Yes
-      - No
-
-Conditions:
-  Pipeline: !Equals [ !Ref CICD, Yes ]
-
 Resources:
   CloudFrontStack:
     Type: "AWS::CloudFormation::Stack"
@@ -69,13 +58,12 @@ Resources:
   CodePipelineStack:
     Type: "AWS::CloudFormation::Stack"
     DependsOn: CloudFrontStack
-    Condition: Pipeline
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/pipeline.yaml"
       Parameters:
         Environment:  !Ref EnvironmentName
         GitHubAuthToken: !Ref GitHubAuthToken
-        RepoName: 'Quicksight-Key-Metrics'
+        RepoName: !Ref ProjectName
         ArtifactsBucket: !Ref ArtifactsBucket
         S3BucketName: !Ref FrontendBucket
         CloudFrontId: !GetAtt CloudFrontStack.Outputs.CloudFrontId
@@ -83,18 +71,18 @@ Resources:
         ProjectName: !Ref ProjectName
       Tags:
         - Key: Name
-          Value: CodepipelineStack
+          Value: CodePipelineStack
 
   NotificationStack:
     Type: "AWS::CloudFormation::Stack"
-    DependsOn: CodepipelineStack
+    DependsOn: CodePipelineStack
     Properties:
       TemplateURL: !Sub "https://s3.amazonaws.com/${TemplatePath}/cft/frontend/notification.yaml"
       Parameters:
         Environment: !Ref EnvironmentName
-        PipelineStack: !GetAtt CodepipelineStack.Outputs.StackName
         SecurityStack: !Ref SecurityStack
         TemplatePath: !Ref TemplatePath
+        PipelineStack: !GetAtt CodePipelineStack.Outputs.StackName
       Tags:
         - Key: Name
           Value: NotificationStack
